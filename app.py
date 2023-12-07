@@ -5,7 +5,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, LoginForm, MessageForm, UserEditForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -145,6 +145,8 @@ def users_show(user_id):
     """Show user profile."""
 
     user = User.query.get_or_404(user_id)
+    likes = user.likes
+    msgs = [msg.id for msg in likes]
 
     # snagging messages in order from the database;
     # user.messages won't be in order by default
@@ -154,7 +156,8 @@ def users_show(user_id):
                 .order_by(Message.timestamp.desc())
                 .limit(100)
                 .all())
-    return render_template('users/show.html', user=user, messages=messages)
+    
+    return render_template('users/show.html', user=user, messages=messages, likes = user.likes, msgs = msgs)
 
 
 @app.route('/users/<int:user_id>/following')
@@ -282,6 +285,30 @@ def messages_show(message_id):
     msg = Message.query.get(message_id)
     return render_template('messages/show.html', message=msg)
 
+@app.route('/users/<int:user_id>/likes', methods= ["GET"])
+def show_likes(user_id):
+    if not g.user:
+        flash("please log in", "danger")
+        return redirect("/")
+    user = User.query.get_or_404(user_id)
+    likes = user.likes
+    return render_template("users/likes.html", user = user , likes= likes)
+
+@app.route('/messages/<int:message_id>/unlike', methods=["POST"])
+def unlike(message_id):
+    user = g.user
+    like = Likes.query.filter(Likes.message_id == message_id).first()
+    db.session.delete(like)
+    db.session.commit()
+    return redirect(f"/users/{user.id}")
+@app.route('/messages/<int:message_id>/like', methods =["POST"])
+def add_like(message_id):
+    user = g.user
+    like = Likes(user_id = user.id, message_id = message_id)
+    db.session.add(like)
+    db.session.commit()
+    flash("liked!")
+    return redirect(f"/users/{user.id}")
 
 @app.route('/messages/<int:message_id>/delete', methods=["POST"])
 def messages_destroy(message_id):
